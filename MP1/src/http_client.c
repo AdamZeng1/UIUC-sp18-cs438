@@ -10,21 +10,23 @@
 
 #include <arpa/inet.h>
 
-#define MAXSIZE 512
+#define BUF_SIZE 512
 
-/* 
+/**
  * Global Variables
  */
-char *url, *file_path;
+char url[2500], file_path[2500];
 int port;
 
-/*
+/**
  * Function declaration
  */
 
 void *get_in_addr(struct sockaddr *sa);
 int connect_TCP(char *addr, char *port);
 void parse_url(char *input);
+void send_http_request(int sockfd);
+void write_line(int sockfd, char *line);
 
 int main(int argc, char* argv[])
 {
@@ -32,13 +34,24 @@ int main(int argc, char* argv[])
         fprintf(stderr, "usage: ./http_client <url>\n");
         exit(1);
     }
+    int sock_fd;
+    char port_a[8];
 
     parse_url(argv[1]);
+    sprintf(port_a, "%d", port);
+    if ((sock_fd = connect_TCP(url, port_a)) < 0) {
+        exit(1);
+    }
+
+    send_http_request(sock_fd);
+    char buff[BUF_SIZE];
+    while (read(sock_fd, buff, BUF_SIZE) > 0) {
+        printf("%s\n", buff);
+    }
 
 
+    close(sock_fd);
 
-    free(url);
-    free(file_path);
     return 0;
 }
 
@@ -49,6 +62,12 @@ void *get_in_addr(struct sockaddr *sa)
 	}
 
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+void write_line(int sockfd, char *line) {
+    if (write(sockfd, line, strlen(line)+1) < 0) {
+        perror("write failed");
+    }
 }
 
 int connect_TCP(char *addr, char *port) 
@@ -92,10 +111,9 @@ int connect_TCP(char *addr, char *port)
 
 void parse_url(char *input) 
 {
-    url = malloc(sizeof(char) * 2500);
-    file_path = malloc(sizeof(char) * 2500);
     *url = '\0';
-    *file_path = '\0';
+    *file_path = '/';
+    file_path[1] = '\0';
     port = 80;
 
     int flag = 0;
@@ -147,5 +165,24 @@ void parse_url(char *input)
         strcpy(file_path, "/");
     }
 
-    printf("%s\n%d\n%s\n", url, port, file_path);
+    if (strncmp(url, "http", 4) == 0) {
+        int i = 0;
+        for(; i < (int)strlen(url)-7; i++) {
+            url[i] = url[i + 7];
+        }
+        url[i] = '\0';
+    }
+
+}
+
+void send_http_request(int sockfd) 
+{
+    char *tmp = malloc(1000);
+    sprintf(tmp, "GET %s HTTP/1.0\r\n", file_path);
+    write_line(sockfd, tmp);
+    write_line(sockfd, "Accept: */*\r\n");
+    write_line(sockfd, "Keep-Alive: 300\r\n");
+    write_line(sockfd, "Host: localhost:8000\r\n");
+    write_line(sockfd, "Connection: Keep-Alive\r\n");
+    free(tmp);
 }
