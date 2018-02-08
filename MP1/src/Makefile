@@ -6,7 +6,7 @@ CC = gcc
 WARNINGS = -Wall -Wextra -Werror -Wno-error=unused-parameter
 CFLAGS_DEBUG   = $(WARNINGS) -g
 
-all: $(CLIENT)
+all: $(CLIENT) $(SERVER)
 
 $(CLIENT): http_client.c
 	$(CC) $^ $(CFLAGS_DEBUG) -o $(CLIENT)

@@ -10,13 +10,14 @@
 
 #include <arpa/inet.h>
 
-#define BUF_SIZE 512
+#define BUF_SIZE 1024
 
 /**
  * Global Variables
  */
 char url[2500], file_path[2500];
 int port;
+FILE *output;
 
 /**
  * Function declaration
@@ -27,6 +28,8 @@ int connect_TCP(char *addr, char *port);
 void parse_url(char *input);
 void send_http_request(int sockfd);
 void write_line(int sockfd, char *line);
+void http_client(int sockfd, char *input);
+int readline (int fd, char* ptr, int maxlen);
 
 int main(int argc, char* argv[])
 {
@@ -42,32 +45,138 @@ int main(int argc, char* argv[])
     if ((sock_fd = connect_TCP(url, port_a)) < 0) {
         exit(1);
     }
+    output = fopen("output", "w");
 
     send_http_request(sock_fd);
     char buff[BUF_SIZE];
-    while (read(sock_fd, buff, BUF_SIZE) > 0) {
-        printf("%s\n", buff);
+    int redirect_flag = 0;
+    int write_flag = 0;
+    while (readline(sock_fd, buff, BUF_SIZE) > 0) {
+        if (!redirect_flag) {
+            if (strncmp(buff, "HTTP/1.1 301", 12) == 0 || strncmp(buff, "HTTP/1.0 301", 12) == 0) {
+                redirect_flag = 1;
+                printf("%s", buff);
+            } else {
+                if (write_flag) {
+                    printf("%s", buff);
+                    fprintf(output, "%s", buff);
+                } else {
+                    printf("%s", buff);
+                }
+                if (!write_flag && strncmp(buff, "\r\n", 2) == 0) {
+                    write_flag = 1;
+                }
+            }
+        } else {
+            if (strncmp(buff, "Location", 8) == 0) {
+                printf("%s", buff);
+                int n = 0;
+                int i = 10;
+                char new_url[2000];
+                while (buff[i] != '\r' && buff[i] != '\n') {
+                    new_url[n] = buff[i];
+                    i++;
+                    n++;
+                }
+                new_url[n] = '\0';
+                http_client(sock_fd, new_url);
+                break;
+            } else {
+                printf("%s", buff);
+            }
+        }
     }
 
 
     close(sock_fd);
+    fclose(output);
 
     return 0;
 }
 
+void http_client(int sock_fd, char *input) {
+    parse_url(input);
+    char port_a[20];
+    sprintf(port_a, "%d", port);
+    if ((sock_fd = connect_TCP(url, port_a)) < 0) {
+        exit(1);
+    }
+
+    send_http_request(sock_fd);
+    char buff[BUF_SIZE];
+    int redirect_flag = 0;
+    int write_flag = 0;
+    while (readline(sock_fd, buff, BUF_SIZE) > 0) {
+        if (!redirect_flag) {
+            if (strncmp(buff, "HTTP/1.1 301", 12) == 0 || strncmp(buff, "HTTP/1.0 301", 12) == 0) {
+                redirect_flag = 1;
+                if (write_flag) {
+                    printf("%s", buff);
+                    fprintf(output, "%s", buff);
+                } else {
+                    printf("%s", buff);
+                }
+                if (!write_flag && strncmp(buff, "\r\n", 2) == 0) {
+                    write_flag = 1;
+                }
+            } else {
+            }
+        } else {
+            if (strncmp(buff, "Location", 8) == 0) {
+                printf("%s", buff);
+                int n = 0;
+                int i = 10;
+                char new_url[2000];
+                while (buff[i] != '\r' && buff[i] != '\n') {
+                    new_url[n] = buff[i];
+                    i++;
+                    n++;
+                }
+                new_url[n] = '\0';
+                http_client(sock_fd, new_url);
+                break;
+            } else {
+                printf("%s", buff);
+            }
+        }
+    }
+}
+
 void *get_in_addr(struct sockaddr *sa)
 {
-	if (sa->sa_family == AF_INET) {
-		return &(((struct sockaddr_in*)sa)->sin_addr);
-	}
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
 
-	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
 void write_line(int sockfd, char *line) {
-    if (write(sockfd, line, strlen(line)+1) < 0) {
+    if (write(sockfd, line, strlen(line) + 1) < 0) {
         perror("write failed");
     }
+}
+
+int readline (int fd, char* ptr, int maxlen) {
+    int n, rc;
+    char c;
+    for (n = 1; n < maxlen; n++) {
+        if ((rc = read(fd, &c, 1)) == 1) {
+            *ptr++ = c;
+            if (c == '\n') {
+                break;
+            }
+        } else if (rc == 0) {
+            if (n == 1)
+                return 0;
+            else
+                break;      // EOF, no data read
+        } else
+            return(-1);     // EOF, some data was read
+    }
+
+    *ptr = 0;
+    return(n);
 }
 
 int connect_TCP(char *addr, char *port) 
@@ -161,8 +270,8 @@ void parse_url(char *input)
         ptr_i++;
     }
 
-    if (strlen(file_path) == 0) {
-        strcpy(file_path, "/");
+    if (strlen(file_path) == 1) {
+        strcpy(file_path, "");
     }
 
     if (strncmp(url, "http", 4) == 0) {
@@ -177,12 +286,14 @@ void parse_url(char *input)
 
 void send_http_request(int sockfd) 
 {
-    char *tmp = malloc(1000);
-    sprintf(tmp, "GET %s HTTP/1.0\r\n", file_path);
+    //sockfd = 1;
+    char tmp[3000];
+    sprintf(tmp, "GET /%s HTTP/1.0\r\n\r\n", file_path);
     write_line(sockfd, tmp);
-    write_line(sockfd, "Accept: */*\r\n");
-    write_line(sockfd, "Keep-Alive: 300\r\n");
-    write_line(sockfd, "Host: localhost:8000\r\n");
-    write_line(sockfd, "Connection: Keep-Alive\r\n");
-    free(tmp);
+    //sprintf(tmp, "Host: %s:%d\r\n", url, port);
+    //write_line(sockfd, tmp);
+    //write_line(sockfd, "Accept: */*\r\n");
+    //write_line(sockfd, "Keep-Alive: 300\r\n");
+    //write_line(sockfd, "Connection: Keep-Alive\r\n\r\n");
+    //free(tmp);
 }
