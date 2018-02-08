@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
 }
 
 void write_line(int sockfd, char *line) {
-    if (write(sockfd, line, strlen(line) + 1) < 0) {
+    if (write(sockfd, line, strlen(line)) < 0) {
         perror("write failed");
     }
 }
@@ -141,18 +141,10 @@ void http_400(int sockfd) {
 void http_accept(int sockfd, FILE *file) {
     write_line(sockfd, (char*)"HTTP/1.0 200 OK\r\n");
     write_line(sockfd, (char*)"Content-Type: text/html\r\n\r\n");
-    fflush(stdout);
 
-    char c = '\0';
-    c = (char)fgetc(file);
-    while (c != EOF) {
-        if (c == '\n') {
-            //write(sockfd, (char *)"\r\n", 1);
-            write(sockfd, &c, 1);
-        } else {
-            write(sockfd, &c, 1);
-        }
-        c = (char)fgetc(file);
+    char c;
+    while ((c = fgetc(file)) && (c != EOF)) {
+        write(sockfd, &c, 1);
     }
 }
 

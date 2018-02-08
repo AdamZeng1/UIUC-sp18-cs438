@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <string.h>
 #include <netdb.h>
@@ -17,7 +18,7 @@
  */
 char url[2500], file_path[2500];
 int port;
-FILE *output;
+int output;
 
 /**
  * Function declaration
@@ -45,9 +46,10 @@ int main(int argc, char* argv[])
     if ((sock_fd = connect_TCP(url, port_a)) < 0) {
         exit(1);
     }
-    output = fopen("output", "w");
+    output = open("output", O_RDWR | O_CREAT | O_TRUNC, 0666);
 
     send_http_request(sock_fd);
+    /* We have to handle 301 redirect */
     char buff[BUF_SIZE];
     int redirect_flag = 0;
     int write_flag = 0;
@@ -56,15 +58,12 @@ int main(int argc, char* argv[])
             if (strncmp(buff, "HTTP/1.1 301", 12) == 0 || strncmp(buff, "HTTP/1.0 301", 12) == 0) {
                 redirect_flag = 1;
                 printf("%s", buff);
-            } else {
-                if (write_flag) {
-                    printf("%s", buff);
-                    fprintf(output, "%s", buff);
-                } else {
-                    printf("%s", buff);
-                }
+            } else { // normal header
+                printf("%s", buff);
                 if (!write_flag && strncmp(buff, "\r\n", 2) == 0) {
+                    /* begin write to "output" */
                     write_flag = 1;
+                    break;
                 }
             }
         } else {
@@ -83,13 +82,27 @@ int main(int argc, char* argv[])
                 break;
             } else {
                 printf("%s", buff);
+                if (!write_flag && strncmp(buff, "\r\n", 2) == 0) {
+                    /* begin write to "output" */
+                    write_flag = 1;
+                    break;
+                }
             }
+        }
+    }
+
+    if (write_flag) {
+        int ret = read(sock_fd, buff, BUF_SIZE-1);
+        while (ret > 0) {
+            write(1, buff, ret);
+            write(output, buff, ret);
+            ret = read(sock_fd, buff, BUF_SIZE-1);
         }
     }
 
 
     close(sock_fd);
-    fclose(output);
+    close(output);
 
     return 0;
 }
@@ -103,6 +116,7 @@ void http_client(int sock_fd, char *input) {
     }
 
     send_http_request(sock_fd);
+    /* We have to handle 301 redirect */
     char buff[BUF_SIZE];
     int redirect_flag = 0;
     int write_flag = 0;
@@ -110,16 +124,14 @@ void http_client(int sock_fd, char *input) {
         if (!redirect_flag) {
             if (strncmp(buff, "HTTP/1.1 301", 12) == 0 || strncmp(buff, "HTTP/1.0 301", 12) == 0) {
                 redirect_flag = 1;
-                if (write_flag) {
-                    printf("%s", buff);
-                    fprintf(output, "%s", buff);
-                } else {
-                    printf("%s", buff);
-                }
+                printf("%s", buff);
+            } else { // normal header
+                printf("%s", buff);
                 if (!write_flag && strncmp(buff, "\r\n", 2) == 0) {
+                    /* begin write to "output" */
                     write_flag = 1;
+                    break;
                 }
-            } else {
             }
         } else {
             if (strncmp(buff, "Location", 8) == 0) {
@@ -137,7 +149,21 @@ void http_client(int sock_fd, char *input) {
                 break;
             } else {
                 printf("%s", buff);
+                if (!write_flag && strncmp(buff, "\r\n", 2) == 0) {
+                    /* begin write to "output" */
+                    write_flag = 1;
+                    break;
+                }
             }
+        }
+    }
+
+    if (write_flag) {
+        int ret = read(sock_fd, buff, BUF_SIZE-1);
+        while (ret > 0) {
+            write(1, buff, ret);
+            write(output, buff, ret);
+            ret = read(sock_fd, buff, BUF_SIZE-1);
         }
     }
 }
