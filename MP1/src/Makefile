@@ -4,7 +4,7 @@ SERVER=http_server
 # set up compiler
 CC = gcc
 WARNINGS = -Wall -Wextra -Werror -Wno-error=unused-parameter
-CFLAGS_DEBUG   = $(WARNINGS) -g
+CFLAGS_DEBUG   = -std=gnu11 -g
 
 all: $(CLIENT) $(SERVER)
 

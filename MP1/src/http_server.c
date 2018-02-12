@@ -143,8 +143,11 @@ void http_accept(int sockfd, FILE *file) {
     write_line(sockfd, (char*)"Content-Type: text/html\r\n\r\n");
 
     char c;
+    int n;
     while ((c = fgetc(file)) && (c != EOF)) {
-        write(sockfd, &c, 1);
+        while (write(sockfd, &c, 1) != 1) {
+            // NULL
+        }
     }
 }
 

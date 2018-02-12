@@ -11,7 +11,7 @@
 
 #include <arpa/inet.h>
 
-#define BUF_SIZE 1024
+#define BUF_SIZE 500
 
 /**
  * Global Variables
@@ -94,8 +94,9 @@ int main(int argc, char* argv[])
     if (write_flag) {
         int ret = read(sock_fd, buff, BUF_SIZE-1);
         while (ret > 0) {
-            write(1, buff, ret);
-            write(output, buff, ret);
+            //write(1, buff, ret);
+            while (write(output, buff, ret) != ret) {
+            }
             ret = read(sock_fd, buff, BUF_SIZE-1);
         }
     }
@@ -159,11 +160,12 @@ void http_client(int sock_fd, char *input) {
     }
 
     if (write_flag) {
-        int ret = read(sock_fd, buff, BUF_SIZE-1);
+        int ret = read(sock_fd, buff, 1);
         while (ret > 0) {
-            write(1, buff, ret);
-            write(output, buff, ret);
-            ret = read(sock_fd, buff, BUF_SIZE-1);
+            //write(1, buff, ret);
+            while (write(output, buff, ret) != ret) {
+            }
+            ret = read(sock_fd, buff, 1);
         }
     }
 }
@@ -178,7 +180,7 @@ void *get_in_addr(struct sockaddr *sa)
 }
 
 void write_line(int sockfd, char *line) {
-    if (write(sockfd, line, strlen(line) + 1) < 0) {
+    if (write(sockfd, line, strlen(line)) < 0) {
         perror("write failed");
     }
 }
@@ -307,6 +309,7 @@ void parse_url(char *input)
         }
         url[i] = '\0';
     }
+    //fprintf(stderr, "-%s-%s-\n", url, file_path);
 
 }
 
@@ -314,10 +317,10 @@ void send_http_request(int sockfd)
 {
     //sockfd = 1;
     char tmp[3000];
-    sprintf(tmp, "GET /%s HTTP/1.0\r\n\r\n", file_path);
+    sprintf(tmp, "GET /%s HTTP/1.0\r\n", file_path);
     write_line(sockfd, tmp);
-    //sprintf(tmp, "Host: %s:%d\r\n", url, port);
-    //write_line(sockfd, tmp);
+    sprintf(tmp, "Host: %s:%d\r\n\r\n", url, port);
+    write_line(sockfd, tmp);
     //write_line(sockfd, "Accept: */*\r\n");
     //write_line(sockfd, "Keep-Alive: 300\r\n");
     //write_line(sockfd, "Connection: Keep-Alive\r\n\r\n");
